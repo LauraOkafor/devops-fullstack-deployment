@@ -6,13 +6,11 @@ services:
     image: lauraokafor/project:backend
     ports:
       - "8000:8000"
-    depends_on:
-      - database
+   
 
   frontend:
     container_name: react-app
     image: lauraokafor/project:frontend
-    # build: /home/ubuntu/ComputexFrontend
     ports:
       - "5173:5173"
 

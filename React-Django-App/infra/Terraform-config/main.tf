@@ -61,6 +61,14 @@ resource "aws_security_group" "frontend_sg" {
   }
 
   ingress {
+    from_port   = 5173
+    to_port     = 5173
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+
+  ingress {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
@@ -150,7 +158,7 @@ resource "aws_security_group" "database_sg" {
 
 # EC2 Instances
 resource "aws_instance" "frontend" {
-  ami                    = "ami-06c68f701d8090592"
+  ami                    = "ami-084568db4383264d4"
   instance_type          = var.instance_type
   key_name               = var.key_name
   subnet_id              = aws_subnet.public_subnet.id
@@ -163,7 +171,7 @@ resource "aws_instance" "frontend" {
 }
 
 resource "aws_instance" "backend" {
-  ami                    = "ami-06c68f701d8090592"
+  ami                    = "ami-084568db4383264d4"
   instance_type          = var.instance_type
   key_name               = var.key_name
   subnet_id              = aws_subnet.public_subnet.id
@@ -176,7 +184,7 @@ resource "aws_instance" "backend" {
 }
 
 resource "aws_instance" "database" {
-  ami                    = "ami-06c68f701d8090592"
+  ami                    = "ami-084568db4383264d4"
   instance_type          = var.instance_type
   key_name               = var.key_name
   subnet_id              = aws_subnet.public_subnet.id

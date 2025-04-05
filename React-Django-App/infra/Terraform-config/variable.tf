@@ -11,12 +11,12 @@ variable "availability_zone" {
 
 # variable "ami_id" {
 #   description = "AMI ID for EC2 instances"
-#   default     = "ami-06c68f701d8090592" # Ubuntu 20.04 LTS
+#   default     = "ami-06c68f701d8090592"   ami-0c2b8ca1dad447f8a# Ubuntu 20.04 LTS 
 # }
 
 variable "instance_type" {
   description = "Instance type for EC2 instances"
-  default     = "t2.micro"
+  default     = "t3.medium"
 }
 
 variable "key_name" {

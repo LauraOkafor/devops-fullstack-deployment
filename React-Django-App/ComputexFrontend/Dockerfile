@@ -1,5 +1,5 @@
 # Use Node.js as the base image for building the frontend
-FROM node:18-alpine as build
+FROM node:20-alpine 
 
 # Set working directory
 WORKDIR /app
@@ -14,13 +14,13 @@ RUN npm install
 COPY . .
 
 # Build the application
-RUN npm run build
+# RUN npm run build
 
 # Production stage using Nginx to serve static files
-FROM nginx:alpine
+# FROM nginx:alpine
 
 # Copy built assets from the build stage
-COPY --from=build /app/dist /usr/share/nginx/html
+# COPY --from=build /app/dist /usr/share/nginx/html
 
 # # Copy custom Nginx configuration if needed
 # COPY nginx.conf /etc/nginx/conf.d/default.conf
@@ -29,4 +29,4 @@ COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 5173
 
 # Start Nginx server
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["npm", "-g", "run", "dev","serve", "-s", "build"]

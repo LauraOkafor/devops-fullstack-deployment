@@ -28,3 +28,7 @@ Run the following commands to provision the infrastructure:
 ```bash
 terraform init  # Initialize Terraform
 terraform apply  # Apply the configuration to create the AWS resources
+
+
+docker build -t lauraokafor/project:backend .
+docker build -t lauraokafor/project:frontend .

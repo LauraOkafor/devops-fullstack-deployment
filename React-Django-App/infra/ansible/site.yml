@@ -1,19 +1,24 @@
-- hosts: all
+---
+- name: Configure and provision all VMs
+  hosts: all
   become: true
   tasks:
     - import_tasks: common.yml
 
-- hosts: frontend
+- name: Configure frontend VM
+  hosts: frontend
   become: true
   tasks:
     - import_tasks: frontend.yml
 
-- hosts: backend
+- name: Configure backend VM
+  hosts: backend
   become: true
   tasks:
     - import_tasks: backend.yml
 
-- hosts: database
+- name: Configure database VM
+  hosts: database
   become: true
   tasks:
     - import_tasks: database.yml

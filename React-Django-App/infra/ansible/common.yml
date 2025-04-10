@@ -1,3 +1,19 @@
+---
+
+- name: Copy the PEM file to the VM
+  copy:
+    src: /Users/m1/Downloads/project.pem
+    dest: /home/ubuntu/.ssh/project.pem
+    mode: '0600'
+  become_user: ubuntu
+
+- name: Set correct permissions on the PEM key
+  file:
+    path: /home/ubuntu/.ssh/project.pem
+    mode: '0600'
+    owner: ubuntu
+    group: ubuntu
+
 - name: Update and upgrade apt packages
   apt:
     update_cache: yes
@@ -28,6 +44,12 @@
     url: https://github.com/docker/compose/releases/download/v2.18.1/docker-compose-linux-x86_64
     dest: /usr/local/bin/docker-compose
     mode: '0755'
+
+- name: Start Docker service
+  service:
+    name: docker
+    state: started
+    enabled: yes
 
 - name: Add user to docker group
   user:

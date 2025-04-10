@@ -1,0 +1,19 @@
+- hosts: all
+  become: true
+  tasks:
+    - import_tasks: common.yml
+
+- hosts: frontend
+  become: true
+  tasks:
+    - import_tasks: frontend.yml
+
+- hosts: backend
+  become: true
+  tasks:
+    - import_tasks: backend.yml
+
+- hosts: database
+  become: true
+  tasks:
+    - import_tasks: database.yml

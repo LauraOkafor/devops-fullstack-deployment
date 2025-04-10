@@ -15,16 +15,19 @@ services:
     build: ./ComputexFrontend
     ports:
       - "5173:5173"
+    depends_on:
+      - backend
 
   database:
     image: postgres
-    container_name: database-1
+    # container_name: database
     environment:
       - POSTGRES_USER=admin
       - POSTGRES_PASSWORD=12345
       - POSTGRES_DB=computex
     volumes:
       - ddata:/var/lib/postgresql/data
+      # - ./postgres.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d computex"]
       interval: 5s

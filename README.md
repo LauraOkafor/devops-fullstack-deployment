@@ -28,7 +28,71 @@ Run the following commands to provision the infrastructure:
 ```bash
 terraform init  # Initialize Terraform
 terraform apply  # Apply the configuration to create the AWS resources
+```
 
+# Ansible & Docker Configuration
 
-docker build -t lauraokafor/project:backend .
-docker build -t lauraokafor/project:frontend .
+## What I Did:
+
+- **Installed Docker and Docker Compose** on the EC2 instances.
+- **Used Ansible playbooks** to automate the setup of dependencies, including Docker, Docker Compose, and cloning the necessary GitHub repositories.
+- **Cloned the Development branch** of the application (frontend, backend, and database) from the GitHub repository to the respective EC2 instances.
+- **Dockerized Full-Stack Application:**
+  - Frontend, Backend, and Database were Dockerized to run in separate containers.
+  - Set up Docker Compose to manage multi-container environments for the application.
+  - Configured each component with a Dockerfile to build and run containers.
+- **Automated Deployment:**
+  - Used Ansible to automate the deployment process, ensuring that every instance has the latest code from the Development branch.
+  - Each component was deployed and run within its own container (frontend with Nginx, backend with Gunicorn, database with PostgreSQL).
+
+## Technologies Used:
+- **Ansible**: Automated the provisioning of EC2 instances and deployment of Dockerized application components.
+- **Docker**: Containerized the frontend, backend, and database components.
+- **Docker Compose**: Used to orchestrate the containers and ensure communication between components.
+- **Git**: Cloned the repositories for the frontend, backend, and database components from the GitHub repo.
+- **GitHub**: The code repository hosting the full-stack application.
+- **AWS EC2**: Hosting the application on virtual machines.
+
+## How to Use:
+
+### 1. Clone the Repository:
+Clone this repository to your local machine:
+
+```bash
+git clone https://github.com/LauraOkafor/devops-fullstack-deployment.git
+cd devops-fullstack-deployment/ansible
+```
+
+### 2. Update Inventory File:
+
+Update the `inventory.ini` file with the public IPs of your EC2 instances for the frontend, backend, and database components.
+
+```ini
+[frontend]
+frontend ansible_host=FRONTEND_VM_IP ansible_user=ubuntu
+
+[backend]
+backend ansible_host=BACKEND_VM_IP ansible_user=ubuntu
+
+[database]
+database ansible_host=DATABASE_VM_IP ansible_user=ubuntu
+```
+### Run Ansible Playbook:
+
+To run the Ansible playbook and deploy the full-stack application, use the following command:
+
+```bash
+ansible-playbook -i inventory.ini site.yml
+```
+
+### This will:
+- Install **Docker** and **Docker Compose** on the EC2 instances.
+- Clone the respective code (frontend, backend, and database) from the **Development** branch of your GitHub repo.
+- Set up **Docker** and **Docker Compose** to run your application.
+
+### Verify Deployment:
+After the playbook runs successfully, you should be able to access:
+
+- **Frontend**: Accessible via the public IP of the frontend EC2 instance.
+- **Backend**: The backend should be accessible from the frontend or through its IP.
+- **Database**: Ensure the database is running, and the backend is able to connect to it.

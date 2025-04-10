@@ -1,7 +1,5 @@
-node_modules
-build
-dist
-.vscode
-.env
-Dockerfile
-.dockerignore
+# node_modules/
+# build/
+# dist/
+# .vscode/
+# .env

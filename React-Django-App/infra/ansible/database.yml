@@ -5,3 +5,8 @@
     version: Development
     depth: 1
     force: yes
+
+- name: Start database using docker-compose
+  shell: docker-compose up -d
+  args:
+    chdir: /home/ubuntu/database/React-Django-App

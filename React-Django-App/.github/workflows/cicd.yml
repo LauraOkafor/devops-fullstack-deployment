@@ -1,0 +1,107 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ Development, Production ]
+  pull_request:
+    branches: [ Development ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    # Skip deployment when it's just a PR
+    if: github.event_name != 'pull_request'
+
+    steps:
+      # Pull the code from the repo
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Set environment type (dev or prod) from branch name
+      - name: Set environment
+        run: |
+          if [[ "${GITHUB_REF#refs/heads/}" == "Production" ]]; then
+            echo "DEPLOY_ENV=production" >> $GITHUB_ENV
+          else
+            echo "DEPLOY_ENV=development" >> $GITHUB_ENV
+          fi
+
+      # Login to Docker Hub to allow pushing images
+      - name: DockerHub Login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Build and push Frontend image to DockerHub
+      - name: Build & push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./React-Django-App
+          push: true
+          tags: lauraokafor/project:frontend
+
+      # Build and push Backend image to DockerHub
+      - name: Build & push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./React-Django-App
+          push: true
+          tags: lauraokafor/project:backend
+
+      # Set up SSH so Ansible can connect to your servers
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+          # Add all VM IPs to known_hosts to avoid SSH prompts
+          grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' ./infra/ansible/inventory.ini | while read -r ip; do
+            ssh-keyscan -H "$ip" >> ~/.ssh/known_hosts
+          done
+
+      # Create a temporary Ansible inventory with GitHub's SSH path
+      - name: Create temp inventory
+        run: |
+          cp ./infra/ansible/inventory.ini ./temp_inventory.ini
+          sed -i 's|ansible_ssh_private_key_file=.*|ansible_ssh_private_key_file=~/.ssh/id_rsa|g' ./temp_inventory.ini
+
+      # Inject updated image names into your docker-compose files
+      - name: Update Docker Compose images
+        run: |
+          if [ -f "./React-Django-App/docker-compose.yml" ]; then
+            sed -i "s|image: .*frontend.*|image: lauraokafor/project:frontend|g" ./React-Django-App/docker-compose.yml
+            sed -i "s|image: .*backend.*|image: lauraokafor/project:backend|g" ./React-Django-App/docker-compose.yml
+          fi
+
+          if [ -f "./React-Django-App/frontend-app/docker-compose.yml" ]; then
+            sed -i "s|image: .*frontend.*|image: lauraokafor/project:frontend|g" ./React-Django-App/frontend-app/docker-compose.yml
+          fi
+
+          if [ -f "./React-Django-App/backend-app/docker-compose.yml" ]; then
+            sed -i "s|image: .*backend.*|image: lauraokafor/project:backend|g" ./React-Django-App/backend-app/docker-compose.yml
+          fi
+
+      # Deploy to servers using Ansible
+      - name: Deploy with Ansible
+        run: |
+          cd ./infra/ansible
+          ansible-playbook -i ../../temp_inventory.ini site.yml
+
+      # Perform basic health check on frontend and backend
+      - name: Health check
+        run: |
+          sleep 20
+          FRONTEND_IP=$(grep -A1 '\[frontend\]' ./infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+          BACKEND_IP=$(grep -A1 '\[backend\]' ./infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+
+          echo "Checking frontend at http://$FRONTEND_IP"
+          curl -f http://$FRONTEND_IP || echo "Frontend check failed"
+
+          echo "Checking backend at http://$BACKEND_IP/api/health"
+          curl -f http://$BACKEND_IP/api/health || echo "Backend check failed"
+
+          echo "Deployment complete"

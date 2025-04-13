@@ -96,3 +96,26 @@ After the playbook runs successfully, you should be able to access:
 - **Frontend**: Accessible via the public IP of the frontend EC2 instance.
 - **Backend**: The backend should be accessible from the frontend or through its IP.
 - **Database**: Ensure the database is running, and the backend is able to connect to it.
+
+## CI/CD with GitHub Actions
+
+### What I Did:
+- Configured a **GitHub Actions** workflow to automate deployment on every push to the `Development` or `Production` branches.
+- Built **Docker** images for the frontend and backend and pushed them to **Docker Hub**.
+- Used **SSH** and **Ansible** to deploy updates automatically to AWS EC2 instances.
+- Performed post-deployment **health checks** to ensure successful rollout.
+
+### Technologies Used:
+- **GitHub Actions** – To automate the build and deployment pipeline.
+- **Docker & Docker Hub** – To build and store container images.
+- **Ansible** – To manage server provisioning and container deployment.
+- **SSH** – To securely connect and deploy to EC2 instances.
+- **Curl** – For basic health checks after deployment.
+
+### What Happens:
+- When code is pushed to `Development` or `Production`:
+  - GitHub Actions builds Docker images.
+  - Docker images are pushed to Docker Hub.
+  - SSH keys are used to access EC2 instances.
+  - Ansible playbooks are executed to deploy the latest changes.
+  - Health checks confirm that both frontend and backend are live.

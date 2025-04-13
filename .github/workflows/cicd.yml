@@ -61,17 +61,17 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           
           # Add all VM IPs to known_hosts to avoid SSH prompts
-          grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' ./infra/ansible/inventory.ini | while read -r ip; do
+          grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' ./React-Django-App/infra/ansible/inventory.ini | while read -r ip; do
             ssh-keyscan -H "$ip" >> ~/.ssh/known_hosts
           done
 
       # Create a temporary Ansible inventory with GitHub's SSH path
       - name: Create temp inventory
         run: |
-          cp ./infra/ansible/inventory.ini ./temp_inventory.ini
+          cp ./React-Django-App/infra/ansible/inventory.ini ./temp_inventory.ini
           sed -i 's|ansible_ssh_private_key_file=.*|ansible_ssh_private_key_file=~/.ssh/id_rsa|g' ./temp_inventory.ini
-
-      # Inject updated image names into your docker-compose files
+            # Inject updated image names into your docker-compose files
+            
       - name: Update Docker Compose images
         run: |
           if [ -f "./React-Django-App/docker-compose.yml" ]; then
@@ -88,22 +88,24 @@ jobs:
           fi
 
       # Deploy to servers using Ansible
+  # Deploy to servers using Ansible
       - name: Deploy with Ansible
         run: |
-          cd ./infra/ansible
-          ansible-playbook -i ../../temp_inventory.ini site.yml
+          cd ./React-Django-App/infra/ansible
+          ansible-playbook -i ../../../temp_inventory.ini site.yml
 
       # Perform basic health check on frontend and backend
+  # Perform basic health check on frontend and backend
       - name: Health check
-        run: |
-          sleep 20
-          FRONTEND_IP=$(grep -A1 '\[frontend\]' ./infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
-          BACKEND_IP=$(grep -A1 '\[backend\]' ./infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
-
-          echo "Checking frontend at http://$FRONTEND_IP"
-          curl -f http://$FRONTEND_IP || echo "Frontend check failed"
-
-          echo "Checking backend at http://$BACKEND_IP/api/health"
-          curl -f http://$BACKEND_IP/api/health || echo "Backend check failed"
-
-          echo "Deployment complete"
+      run: |
+        sleep 20
+        FRONTEND_IP=$(grep -A1 '\[frontend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+        BACKEND_IP=$(grep -A1 '\[backend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+        
+        echo "Checking frontend at http://$FRONTEND_IP"
+        curl -f http://$FRONTEND_IP || echo "Frontend check failed"
+        
+        echo "Checking backend at http://$BACKEND_IP/api/health"
+        curl -f http://$BACKEND_IP/api/health || echo "Backend check failed"
+        
+        echo "Deployment complete"

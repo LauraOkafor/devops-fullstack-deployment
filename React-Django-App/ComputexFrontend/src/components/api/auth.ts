@@ -4,7 +4,7 @@ import axios from "axios";
 // const BASE_URL = "http://localhost:8000";
 // const BASE_URL = process.env.VITE_API_URL || "http://13.48.123.217:8000";
 // const BASE_URL = process.env.VITE_API_URL || "http://13.48.123.217:8000";
- const BASE_URL = "http://54.162.122.28:8000";
+ const BASE_URL = "http://52.206.74.69:8000";
 
 export const login = async (username: string, password: string) => {
   try {

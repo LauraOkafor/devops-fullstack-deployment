@@ -1,8 +1,15 @@
 ---
 
+# - name: Copy the PEM file to the VM
+#   copy:
+#     src: /Users/m1/Downloads/project.pem
+#     dest: /home/ubuntu/.ssh/project.pem
+#     mode: '0600'
+#   become_user: ubuntu
+
 - name: Copy the PEM file to the VM
   copy:
-    src: /Users/m1/Downloads/project.pem
+    src: "{{ playbook_dir }}/../../../project.pem"  # Path relative to where ansible-playbook runs
     dest: /home/ubuntu/.ssh/project.pem
     mode: '0600'
   become_user: ubuntu

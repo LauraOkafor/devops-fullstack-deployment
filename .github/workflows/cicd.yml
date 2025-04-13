@@ -52,6 +52,8 @@ jobs:
           file: ./React-Django-App/Computex/Dockerfile
           push: true
           tags: lauraokafor/project:backend
+      
+      
 
       # Set up SSH so Ansible can connect to your servers
       - name: Setup SSH
@@ -86,16 +88,20 @@ jobs:
           if [ -f "./React-Django-App/backend-app/docker-compose.yml" ]; then
             sed -i "s|image: .*backend.*|image: lauraokafor/project:backend|g" ./React-Django-App/backend-app/docker-compose.yml
           fi
+          
+      # After the SSH setup step and before running Ansible
+      - name: Create PEM file for Ansible
+        run: |
+          echo "${{ secrets.PEM_FILE_CONTENT }}" > ./project.pem
+          chmod 600 ./project.pem
 
       # Deploy to servers using Ansible
-  # Deploy to servers using Ansible
       - name: Deploy with Ansible
         run: |
           cd ./React-Django-App/infra/ansible
           ansible-playbook -i ../../../temp_inventory.ini site.yml
 
       # Perform basic health check on frontend and backend
-  # Perform basic health check on frontend and backend
       - name: Health check
         run: |
           sleep 20

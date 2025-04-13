@@ -97,15 +97,15 @@ jobs:
       # Perform basic health check on frontend and backend
   # Perform basic health check on frontend and backend
       - name: Health check
-      run: |
-        sleep 20
-        FRONTEND_IP=$(grep -A1 '\[frontend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
-        BACKEND_IP=$(grep -A1 '\[backend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
-        
-        echo "Checking frontend at http://$FRONTEND_IP"
-        curl -f http://$FRONTEND_IP || echo "Frontend check failed"
-        
-        echo "Checking backend at http://$BACKEND_IP/api/health"
-        curl -f http://$BACKEND_IP/api/health || echo "Backend check failed"
-        
-        echo "Deployment complete"
+        run: |
+          sleep 20
+          FRONTEND_IP=$(grep -A1 '\[frontend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+          BACKEND_IP=$(grep -A1 '\[backend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+          
+          echo "Checking frontend at http://$FRONTEND_IP"
+          curl -f http://$FRONTEND_IP || echo "Frontend check failed"
+          
+          echo "Checking backend at http://$BACKEND_IP/api/health"
+          curl -f http://$BACKEND_IP/api/health || echo "Backend check failed"
+          
+          echo "Deployment complete"

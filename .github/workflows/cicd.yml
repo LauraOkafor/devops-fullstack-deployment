@@ -39,7 +39,8 @@ jobs:
       - name: Build & push Frontend
         uses: docker/build-push-action@v5
         with:
-          context: ./React-Django-App
+          context: ./React-Django-App/ComputexFrontend
+          file: ./React-Django-App/ComputexFrontend/Dockerfile
           push: true
           tags: lauraokafor/project:frontend
 
@@ -47,7 +48,8 @@ jobs:
       - name: Build & push Backend
         uses: docker/build-push-action@v5
         with:
-          context: ./React-Django-App
+          context: ./React-Django-App/Computex
+          file: ./React-Django-App/Computex/Dockerfile
           push: true
           tags: lauraokafor/project:backend
 
@@ -57,7 +59,7 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-
+          
           # Add all VM IPs to known_hosts to avoid SSH prompts
           grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' ./infra/ansible/inventory.ini | while read -r ip; do
             ssh-keyscan -H "$ip" >> ~/.ssh/known_hosts

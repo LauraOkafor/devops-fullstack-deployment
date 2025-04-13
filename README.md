@@ -88,7 +88,7 @@ ansible-playbook -i inventory.ini site.yml
 ### This will:
 - Install **Docker** and **Docker Compose** on the EC2 instances.
 - Clone the respective code (frontend, backend, and database) from the **Development** branch of your GitHub repo.
-- Set up **Docker** and **Docker Compose** to run your application.
+- Set up **Docker** and **Docker Compose** to run your application.new
 
 ### Verify Deployment:
 After the playbook runs successfully, you should be able to access:

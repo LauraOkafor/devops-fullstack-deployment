@@ -4,7 +4,11 @@ import axios from "axios";
 // const BASE_URL = "http://localhost:8000";
 // const BASE_URL = process.env.VITE_API_URL || "http://13.48.123.217:8000";
 // const BASE_URL = process.env.VITE_API_URL || "http://13.48.123.217:8000";
- const BASE_URL = "http://52.203.188.100:8000";
+//  const BASE_URL = "http://52.203.188.100:8000";
+//  const BASE_URL = process.env.VITE_API_URL || "http://13.48.123.217:8000";
+ const BASE_URL = process.env.VITE_API_URL || "/api";
+//  VITE_API_URL=http://backend-service:8000
+
 
 export const login = async (username: string, password: string) => {
   try {

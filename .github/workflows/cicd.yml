@@ -15,11 +15,9 @@ jobs:
     if: github.event_name != 'pull_request'
 
     steps:
-      # Pull the code from the repo
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Set environment type (dev or prod) from branch name
       - name: Set environment
         run: |
           if [[ "${GITHUB_REF#refs/heads/}" == "Production" ]]; then
@@ -28,14 +26,12 @@ jobs:
             echo "DEPLOY_ENV=development" >> $GITHUB_ENV
           fi
 
-      # Login to Docker Hub to allow pushing images
       - name: DockerHub Login
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Build and push Frontend image to DockerHub
       - name: Build & push Frontend
         uses: docker/build-push-action@v5
         with:
@@ -44,7 +40,6 @@ jobs:
           push: true
           tags: lauraokafor/project:frontend
 
-      # Build and push Backend image to DockerHub
       - name: Build & push Backend
         uses: docker/build-push-action@v5
         with:
@@ -52,28 +47,21 @@ jobs:
           file: ./React-Django-App/Computex/Dockerfile
           push: true
           tags: lauraokafor/project:backend
-      
-      
 
-      # Set up SSH so Ansible can connect to your servers
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          
-          # Add all VM IPs to known_hosts to avoid SSH prompts
           grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' ./React-Django-App/infra/ansible/inventory.ini | while read -r ip; do
             ssh-keyscan -H "$ip" >> ~/.ssh/known_hosts
           done
 
-      # Create a temporary Ansible inventory with GitHub's SSH path
       - name: Create temp inventory
         run: |
           cp ./React-Django-App/infra/ansible/inventory.ini ./temp_inventory.ini
           sed -i 's|ansible_ssh_private_key_file=.*|ansible_ssh_private_key_file=~/.ssh/id_rsa|g' ./temp_inventory.ini
-            # Inject updated image names into your docker-compose files
-            
+
       - name: Update Docker Compose images
         run: |
           if [ -f "./React-Django-App/docker-compose.yml" ]; then
@@ -88,30 +76,102 @@ jobs:
           if [ -f "./React-Django-App/backend-app/docker-compose.yml" ]; then
             sed -i "s|image: .*backend.*|image: lauraokafor/project:backend|g" ./React-Django-App/backend-app/docker-compose.yml
           fi
-          
-      # After the SSH setup step and before running Ansible
+
       - name: Create PEM file for Ansible
         run: |
           echo "${{ secrets.PEM_FILE_CONTENT }}" > ./project.pem
           chmod 600 ./project.pem
 
-      # Deploy to servers using Ansible
       - name: Deploy with Ansible
         run: |
           cd ./React-Django-App/infra/ansible
           ansible-playbook -i ../../../temp_inventory.ini site.yml
 
-      # Perform basic health check on frontend and backend
       - name: Health check
         run: |
           sleep 20
           FRONTEND_IP=$(grep -A1 '\[frontend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
           BACKEND_IP=$(grep -A1 '\[backend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
-          
+
           echo "Checking frontend at http://$FRONTEND_IP"
           curl -f http://$FRONTEND_IP || echo "Frontend check failed"
-          
+
           echo "Checking backend at http://$BACKEND_IP/api/health"
           curl -f http://$BACKEND_IP/api/health || echo "Backend check failed"
-          
+
           echo "Deployment complete"
+
+  setup-k8s:
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/Production'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Python & Ansible
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip
+          pip3 install ansible
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' ./React-Django-App/infra/ansible/inventory.ini | while read -r ip; do
+            ssh-keyscan -H "$ip" >> ~/.ssh/known_hosts
+          done
+
+      - name: Create temp inventory
+        run: |
+          cp ./React-Django-App/infra/ansible/inventory.ini ./temp_inventory.ini
+          sed -i 's|ansible_ssh_private_key_file=.*|ansible_ssh_private_key_file=~/.ssh/id_rsa|g' ./temp_inventory.ini
+
+      - name: Run Kubernetes Ansible setup
+        run: |
+          cd ./React-Django-App/infra/ansible
+          ansible-playbook -i ../../../temp_inventory.ini kubernetes-setup.yml
+
+  deploy-k8s:
+    needs: setup-k8s
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/Production'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' ./React-Django-App/infra/ansible/inventory.ini | while read -r ip; do
+            ssh-keyscan -H "$ip" >> ~/.ssh/known_hosts
+          done
+
+      - name: Copy Kubernetes manifests to Master node (Frontend IP)
+        run: |
+          FRONTEND_IP=$(grep -A1 '\[frontend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+          ssh ubuntu@$FRONTEND_IP "mkdir -p ~/kube-manifests"
+          scp ./React-Django-App/infra/kubernetes/*.yaml ubuntu@$FRONTEND_IP:~/kube-manifests/
+      
+      - name: Deploy application
+        run: |
+          FRONTEND_IP=$(grep -A1 '\[frontend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+          ssh ubuntu@$FRONTEND_IP "kubectl apply -f ~/kube-manifests/database.yaml"
+          ssh ubuntu@$FRONTEND_IP "kubectl apply -f ~/kube-manifests/backend.yaml"
+          ssh ubuntu@$FRONTEND_IP "kubectl apply -f ~/kube-manifests/frontend.yaml"
+
+      - name: Verify deployment
+        run: |
+          FRONTEND_IP=$(grep -A1 '\[frontend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+          ssh ubuntu@$FRONTEND_IP "kubectl get pods -o wide"
+          ssh ubuntu@$FRONTEND_IP "kubectl get services"
+          ssh ubuntu@$FRONTEND_IP "kubectl get ingress"
+    
+
+  

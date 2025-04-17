@@ -1,0 +1,98 @@
+# React-Django-App/infra/ansible/kubernetes-setup.yml
+---
+- name: Install Kubernetes dependencies
+  hosts: all  # Runs on all 3 VMs: frontend, backend, database
+  become: true
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install required packages for Kubernetes
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+        state: present
+
+    - name: Add Kubernetes apt key
+      apt_key:
+        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        state: present
+
+    - name: Add Kubernetes repository
+      apt_repository:
+        repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+        state: present
+
+    - name: Install kubelet, kubeadm, kubectl
+      apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+
+    - name: Disable swap (required for kubeadm to work)
+      command: swapoff -a
+
+    - name: Disable swap permanently in /etc/fstab
+      replace:
+        path: /etc/fstab
+        regexp: '^([^#].*\sswap\s+sw\s+.*)$'
+        replace: '# \1'
+
+- name: Initialize Kubernetes control plane
+  hosts: frontend  # Only the frontend will act as the master node
+  become: true
+  tasks:
+    - name: Initialize Kubernetes cluster
+      command: kubeadm init --pod-network-cidr=10.244.0.0/16 --apiserver-advertise-address={{ ansible_host }}
+      register: kubeadm_init_result
+      ignore_errors: yes
+
+    - name: Create .kube directory
+      file:
+        path: /home/{{ ansible_user }}/.kube
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+
+    - name: Copy admin.conf to .kube/config for kubectl access
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/{{ ansible_user }}/.kube/config
+        remote_src: yes
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0644'
+
+    - name: Install Flannel CNI for pod networking
+      command: kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+      become: false
+
+    - name: Get kubeadm join command
+      command: kubeadm token create --print-join-command
+      register: join_command_result
+
+    #  Save the join command as a fact so it can be accessed by worker nodes
+    - name: Set join command as a fact
+      set_fact:
+        kube_join_cmd: "{{ join_command_result.stdout }}"
+
+- name: Join worker nodes to the Kubernetes cluster
+  hosts: backend,database  # These will act as worker nodes
+  become: true
+  tasks:
+    # Pull the join command from the master node (frontend)
+    - name: Retrieve join command from master
+      set_fact:
+        kube_join_cmd: "{{ hostvars['frontend']['kube_join_cmd'] }}"
+
+    #  Use the dynamically stored join command to join the cluster
+    - name: Join the Kubernetes cluster
+      command: "{{ kube_join_cmd }}"
+      when: kube_join_cmd is defined

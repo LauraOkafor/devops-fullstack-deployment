@@ -6,7 +6,7 @@
     - name: Update apt cache
       apt:
         update_cache: yes
-    
+
     - name: Install required packages for Kubernetes
       apt:
         name:
@@ -14,28 +14,29 @@
           - ca-certificates
           - curl
           - software-properties-common
+          - containerd.io
         state: present
-    
+
     - name: Create keyring directory
       file:
         path: /etc/apt/keyrings
         state: directory
         mode: '0755'
-    
+
     - name: Download Kubernetes apt key
       get_url:
         url: https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key
         dest: /tmp/kubernetes-apt-key.gpg
-    
+
     - name: Add Kubernetes apt key
       command: gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg /tmp/kubernetes-apt-key.gpg
-    
+
     - name: Add Kubernetes repository
       apt_repository:
         repo: deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /
         state: present
         filename: kubernetes
-    
+
     - name: Install kubelet, kubeadm, kubectl
       apt:
         name:
@@ -44,10 +45,47 @@
           - kubectl
         state: present
         update_cache: yes
-    
+
+    - name: Create containerd config directory
+      file:
+        path: /etc/containerd
+        state: directory
+        mode: '0755'
+
+    - name: Configure containerd
+      shell: |
+        containerd config default > /etc/containerd/config.toml
+        sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
+
+    - name: Restart containerd
+      systemd:
+        name: containerd
+        state: restarted
+        enabled: yes
+        daemon_reload: yes
+
+    - name: Load br_netfilter module
+      modprobe:
+        name: br_netfilter
+        state: present
+
+    - name: Set bridge-nf-call-iptables
+      sysctl:
+        name: net.bridge.bridge-nf-call-iptables
+        value: '1'
+        state: present
+        reload: yes
+
+    - name: Set bridge-nf-call-ip6tables
+      sysctl:
+        name: net.bridge.bridge-nf-call-ip6tables
+        value: '1'
+        state: present
+        reload: yes
+
     - name: Disable swap (required for kubeadm to work)
       command: swapoff -a
-    
+
     - name: Disable swap permanently in /etc/fstab
       replace:
         path: /etc/fstab
@@ -58,11 +96,16 @@
   hosts: frontend  # Only the frontend will act as the master node
   become: true
   tasks:
+    - name: Wait for containerd to be ready
+      wait_for:
+        path: /run/containerd/containerd.sock
+        timeout: 60
+
     - name: Initialize Kubernetes cluster
       command: kubeadm init --pod-network-cidr=10.244.0.0/16 --apiserver-advertise-address={{ ansible_host }}
       register: kubeadm_init_result
       ignore_errors: yes
-    
+
     - name: Create .kube directory
       file:
         path: /home/{{ ansible_user }}/.kube
@@ -70,39 +113,43 @@
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
         mode: '0755'
-    
+      when: kubeadm_init_result is success
+
     - name: Copy admin.conf to .kube/config for kubectl access
-      copy:
-        src: /etc/kubernetes/admin.conf
-        dest: /home/{{ ansible_user }}/.kube/config
-        remote_src: yes
-        owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
-        mode: '0644'
-    
+      shell: |
+        if [ -f /etc/kubernetes/admin.conf ]; then
+          cp /etc/kubernetes/admin.conf /home/{{ ansible_user }}/.kube/config
+          chown {{ ansible_user }}:{{ ansible_user }} /home/{{ ansible_user }}/.kube/config
+          chmod 0644 /home/{{ ansible_user }}/.kube/config
+        else
+          echo "admin.conf not found. Kubernetes init may have failed."
+          exit 1
+        fi
+      when: kubeadm_init_result is success
+
     - name: Install Flannel CNI for pod networking
       command: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
       become: false
-    
+      when: kubeadm_init_result is success
+
     - name: Get kubeadm join command
       command: kubeadm token create --print-join-command
       register: join_command_result
-    
-    # Save the join command as a fact so it can be accessed by worker nodes
+      when: kubeadm_init_result is success
+
     - name: Set join command as a fact
       set_fact:
         kube_join_cmd: "{{ join_command_result.stdout }}"
+      when: join_command_result is success
 
 - name: Join worker nodes to the Kubernetes cluster
   hosts: backend,database  # These will act as worker nodes
   become: true
   tasks:
-    # Pull the join command from the master node (frontend)
     - name: Retrieve join command from master
       set_fact:
-        kube_join_cmd: "{{ hostvars['vm_frontend']['kube_join_cmd'] }}"
-    
-    # Use the dynamically stored join command to join the cluster
+        kube_join_cmd: "{{ hostvars['vm_frontend']['kube_join_cmd'] | default('') }}"
+
     - name: Join the Kubernetes cluster
       command: "{{ kube_join_cmd }}"
-      when: kube_join_cmd is defined
+      when: kube_join_cmd is defined and kube_join_cmd != ''

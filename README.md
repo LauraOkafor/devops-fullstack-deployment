@@ -118,4 +118,4 @@ After the playbook runs successfully, you should be able to access:
   - Docker images are pushed to Docker Hub.
   - SSH keys are used to access EC2 instances.
   - Ansible playbooks are executed to deploy the latest changes.
-  - Health checks confirm that both frontend and backend are live.
+  - Health checks confirm that both frontend and backend are live..

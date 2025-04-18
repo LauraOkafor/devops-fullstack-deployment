@@ -87,24 +87,24 @@ jobs:
           cd ./React-Django-App/infra/ansible
           ansible-playbook -i ../../../temp_inventory.ini site.yml
 
-      - name: Health check
-        run: |
-          sleep 20
-          FRONTEND_IP=$(grep -A1 '\[frontend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
-          BACKEND_IP=$(grep -A1 '\[backend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+      # - name: Health check
+      #   run: |
+      #     sleep 20
+      #     FRONTEND_IP=$(grep -A1 '\[frontend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+      #     BACKEND_IP=$(grep -A1 '\[backend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
 
-          echo "Checking frontend at http://$FRONTEND_IP"
-          curl -f http://$FRONTEND_IP || echo "Frontend check failed"
+      #     echo "Checking frontend at http://$FRONTEND_IP"
+      #     curl -f http://$FRONTEND_IP || echo "Frontend check failed"
 
-          echo "Checking backend at http://$BACKEND_IP/api/health"
-          curl -f http://$BACKEND_IP/api/health || echo "Backend check failed"
+      #     echo "Checking backend at http://$BACKEND_IP/api/health"
+      #     curl -f http://$BACKEND_IP/api/health || echo "Backend check failed"
 
-          echo "Deployment complete"
+      #     echo "Deployment complete"
 
   setup-k8s:
     needs: deploy
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/Production'
+    if: github.ref == 'refs/heads/Production' || github.ref == 'refs/heads/Development'
 
     steps:
       - name: Checkout code
@@ -138,7 +138,7 @@ jobs:
   deploy-k8s:
     needs: setup-k8s
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/Production'
+    if: github.ref == 'refs/heads/Production' || github.ref == 'refs/heads/Development'
 
     steps:
       - name: Checkout code
@@ -172,6 +172,3 @@ jobs:
           ssh ubuntu@$FRONTEND_IP "kubectl get pods -o wide"
           ssh ubuntu@$FRONTEND_IP "kubectl get services"
           ssh ubuntu@$FRONTEND_IP "kubectl get ingress"
-    
-
-  

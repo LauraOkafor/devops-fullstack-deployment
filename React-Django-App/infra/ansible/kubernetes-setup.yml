@@ -13,17 +13,29 @@
           - apt-transport-https
           - ca-certificates
           - curl
-          - containerd.io
+          - gnupg
         state: present
 
-    - name: Add Kubernetes apt key
+    - name: Install containerd
+      apt:
+        name: containerd
+        state: present
+
+    - name: Create keyring directory
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Add Kubernetes signing key
       shell: |
-        curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+        curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
-    - name: Add Kubernetes repository
+    - name: Add Kubernetes repository for Ubuntu Noble
       apt_repository:
-        repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+        repo: deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /
         state: present
+        filename: kubernetes
 
     - name: Install kubelet, kubeadm, kubectl
       apt:
@@ -32,6 +44,7 @@
           - kubeadm
           - kubectl
         state: present
+        update_cache: yes
 
     - name: Configure system for Kubernetes
       shell: |

@@ -125,6 +125,7 @@ jobs:
             ssh-keyscan -H "$ip" >> ~/.ssh/known_hosts
           done
 
+      # Reuse the same temp inventory file format from the deploy job
       - name: Create temp inventory
         run: |
           cp ./React-Django-App/infra/ansible/inventory.ini ./temp_inventory.ini

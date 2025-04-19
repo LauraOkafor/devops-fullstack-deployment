@@ -1,0 +1,185 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ Development, Production ]
+  pull_request:
+    branches: [ Development ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    # Skip deployment when it's just a PR
+    if: github.event_name != 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set environment
+        run: |
+          if [[ "${GITHUB_REF#refs/heads/}" == "Production" ]]; then
+            echo "DEPLOY_ENV=production" >> $GITHUB_ENV
+          else
+            echo "DEPLOY_ENV=development" >> $GITHUB_ENV
+          fi
+
+      - name: DockerHub Login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build & push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./React-Django-App/ComputexFrontend
+          file: ./React-Django-App/ComputexFrontend/Dockerfile
+          push: true
+          tags: lauraokafor/project:frontend
+
+      - name: Build & push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./React-Django-App/Computex
+          file: ./React-Django-App/Computex/Dockerfile
+          push: true
+          tags: lauraokafor/project:backend
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' ./React-Django-App/infra/ansible/inventory.ini | while read -r ip; do
+            ssh-keyscan -H "$ip" >> ~/.ssh/known_hosts
+          done
+
+      - name: Create temp inventory
+        run: |
+          cp ./React-Django-App/infra/ansible/inventory.ini ./temp_inventory.ini
+          sed -i 's|ansible_ssh_private_key_file=.*|ansible_ssh_private_key_file=~/.ssh/id_rsa|g' ./temp_inventory.ini
+
+      - name: Update Docker Compose images
+        run: |
+          if [ -f "./React-Django-App/docker-compose.yml" ]; then
+            sed -i "s|image: .*frontend.*|image: lauraokafor/project:frontend|g" ./React-Django-App/docker-compose.yml
+            sed -i "s|image: .*backend.*|image: lauraokafor/project:backend|g" ./React-Django-App/docker-compose.yml
+          fi
+
+          if [ -f "./React-Django-App/frontend-app/docker-compose.yml" ]; then
+            sed -i "s|image: .*frontend.*|image: lauraokafor/project:frontend|g" ./React-Django-App/frontend-app/docker-compose.yml
+          fi
+
+          if [ -f "./React-Django-App/backend-app/docker-compose.yml" ]; then
+            sed -i "s|image: .*backend.*|image: lauraokafor/project:backend|g" ./React-Django-App/backend-app/docker-compose.yml
+          fi
+
+      - name: Create PEM file for Ansible
+        run: |
+          echo "${{ secrets.PEM_FILE_CONTENT }}" > ./project.pem
+          chmod 600 ./project.pem
+
+      - name: Deploy with Ansible
+        run: |
+          cd ./React-Django-App/infra/ansible
+          ansible-playbook -i ../../../temp_inventory.ini site.yml
+
+      # - name: Health check
+      #   run: |
+      #     sleep 20
+      #     FRONTEND_IP=$(grep -A1 '\[frontend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+      #     BACKEND_IP=$(grep -A1 '\[backend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+
+      #     echo "Checking frontend at http://$FRONTEND_IP"
+      #     curl -f http://$FRONTEND_IP || echo "Frontend check failed"
+
+      #     echo "Checking backend at http://$BACKEND_IP/api/health"
+      #     curl -f http://$BACKEND_IP/api/health || echo "Backend check failed"
+
+      #     echo "Deployment complete"
+
+  setup-k8s:
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/Production' || github.ref == 'refs/heads/Development'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Python & Ansible
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip
+          pip3 install ansible
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' ./React-Django-App/infra/ansible/inventory.ini | while read -r ip; do
+            ssh-keyscan -H "$ip" >> ~/.ssh/known_hosts
+          done
+
+      # Reuse the same temp inventory file format from the deploy job
+      - name: Create temp inventory
+        run: |
+          cp ./React-Django-App/infra/ansible/inventory.ini ./temp_inventory.ini
+          sed -i 's|ansible_ssh_private_key_file=.*|ansible_ssh_private_key_file=~/.ssh/id_rsa|g' ./temp_inventory.ini
+
+      - name: Run Kubernetes Ansible setup
+        run: |
+          cd ./React-Django-App/infra/ansible
+          ansible-playbook -i ../../../temp_inventory.ini kubernetes-setup.yml
+
+  # Start here
+  deploy-k8s:
+    needs: setup-k8s
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/Production' || github.ref == 'refs/heads/Development'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' ./React-Django-App/infra/ansible/inventory.ini | while read -r ip; do
+            ssh-keyscan -H "$ip" >> ~/.ssh/known_hosts
+          done
+      
+      - name: Ensure Kubernetes is properly configured
+        run: |
+          FRONTEND_IP=$(grep -A1 '\[frontend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+          ssh ubuntu@$FRONTEND_IP "sudo systemctl status kubelet || sudo systemctl restart kubelet"
+          ssh ubuntu@$FRONTEND_IP "mkdir -p ~/.kube"
+          ssh ubuntu@$FRONTEND_IP "sudo cp -f /etc/kubernetes/admin.conf ~/.kube/config || echo 'admin.conf not found'"
+          ssh ubuntu@$FRONTEND_IP "sudo chown ubuntu:ubuntu ~/.kube/config || echo 'Failed to change ownership'"
+          ssh ubuntu@$FRONTEND_IP "kubectl cluster-info || echo 'Cluster not responding'"
+        
+      - name: Copy Kubernetes manifests to Master node (Frontend IP)
+        run: |
+          FRONTEND_IP=$(grep -A1 '\[frontend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+          ssh ubuntu@$FRONTEND_IP "mkdir -p ~/kube-manifests"
+          scp ./React-Django-App/infra/kubernetes/*.yml ubuntu@$FRONTEND_IP:~/kube-manifests/
+          
+      - name: Deploy application with explicit kubeconfig
+        run: |
+          FRONTEND_IP=$(grep -A1 '\[frontend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+          ssh ubuntu@$FRONTEND_IP "export KUBECONFIG=~/.kube/config && kubectl apply -f ~/kube-manifests/database.yml --validate=false"
+          ssh ubuntu@$FRONTEND_IP "export KUBECONFIG=~/.kube/config && kubectl apply -f ~/kube-manifests/backend.yml --validate=false"
+          ssh ubuntu@$FRONTEND_IP "export KUBECONFIG=~/.kube/config && kubectl apply -f ~/kube-manifests/frontend.yml --validate=false"
+        
+      - name: Verify deployment
+        run: |
+          FRONTEND_IP=$(grep -A1 '\[frontend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+          ssh ubuntu@$FRONTEND_IP "export KUBECONFIG=~/.kube/config && kubectl get pods -o wide"
+          ssh ubuntu@$FRONTEND_IP "export KUBECONFIG=~/.kube/config && kubectl get services"
+          ssh ubuntu@$FRONTEND_IP "export KUBECONFIG=~/.kube/config && kubectl get ingress || echo 'No ingress resources found'"

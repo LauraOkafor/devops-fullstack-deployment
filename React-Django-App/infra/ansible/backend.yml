@@ -1,0 +1,12 @@
+- name: Clone Development branch only
+  git:
+    repo: https://github.com/LauraOkafor/devops-fullstack-deployment.git
+    dest: /home/ubuntu/backend
+    version: Development
+    depth: 1
+    force: yes
+
+- name: Start backend using docker-compose
+  shell: docker-compose up -d
+  args:
+    chdir: /home/ubuntu/backend/React-Django-App

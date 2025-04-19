@@ -135,7 +135,8 @@ jobs:
         run: |
           cd ./React-Django-App/infra/ansible
           ansible-playbook -i ../../../temp_inventory.ini kubernetes-setup.yml
-  #here
+
+  # Start here
   deploy-k8s:
     needs: setup-k8s
     runs-on: ubuntu-latest

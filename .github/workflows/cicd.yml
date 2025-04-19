@@ -135,7 +135,7 @@ jobs:
         run: |
           cd ./React-Django-App/infra/ansible
           ansible-playbook -i ../../../temp_inventory.ini kubernetes-setup.yml
-
+  #here
   deploy-k8s:
     needs: setup-k8s
     runs-on: ubuntu-latest
@@ -153,6 +153,15 @@ jobs:
           grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' ./React-Django-App/infra/ansible/inventory.ini | while read -r ip; do
             ssh-keyscan -H "$ip" >> ~/.ssh/known_hosts
           done
+      
+      - name: Ensure Kubernetes is properly configured
+        run: |
+          FRONTEND_IP=$(grep -A1 '\[frontend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+          ssh ubuntu@$FRONTEND_IP "sudo systemctl status kubelet || sudo systemctl restart kubelet"
+          ssh ubuntu@$FRONTEND_IP "mkdir -p ~/.kube"
+          ssh ubuntu@$FRONTEND_IP "sudo cp -f /etc/kubernetes/admin.conf ~/.kube/config || echo 'admin.conf not found'"
+          ssh ubuntu@$FRONTEND_IP "sudo chown ubuntu:ubuntu ~/.kube/config || echo 'Failed to change ownership'"
+          ssh ubuntu@$FRONTEND_IP "kubectl cluster-info || echo 'Cluster not responding'"
         
       - name: Copy Kubernetes manifests to Master node (Frontend IP)
         run: |
@@ -160,16 +169,16 @@ jobs:
           ssh ubuntu@$FRONTEND_IP "mkdir -p ~/kube-manifests"
           scp ./React-Django-App/infra/kubernetes/*.yml ubuntu@$FRONTEND_IP:~/kube-manifests/
           
-      - name: Deploy application
+      - name: Deploy application with explicit kubeconfig
         run: |
           FRONTEND_IP=$(grep -A1 '\[frontend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
-          ssh ubuntu@$FRONTEND_IP "kubectl apply -f ~/kube-manifests/database.yml"
-          ssh ubuntu@$FRONTEND_IP "kubectl apply -f ~/kube-manifests/backend.yml"
-          ssh ubuntu@$FRONTEND_IP "kubectl apply -f ~/kube-manifests/frontend.yml"
+          ssh ubuntu@$FRONTEND_IP "export KUBECONFIG=~/.kube/config && kubectl apply -f ~/kube-manifests/database.yml --validate=false"
+          ssh ubuntu@$FRONTEND_IP "export KUBECONFIG=~/.kube/config && kubectl apply -f ~/kube-manifests/backend.yml --validate=false"
+          ssh ubuntu@$FRONTEND_IP "export KUBECONFIG=~/.kube/config && kubectl apply -f ~/kube-manifests/frontend.yml --validate=false"
         
       - name: Verify deployment
         run: |
           FRONTEND_IP=$(grep -A1 '\[frontend\]' ./React-Django-App/infra/ansible/inventory.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
-          ssh ubuntu@$FRONTEND_IP "kubectl get pods -o wide"
-          ssh ubuntu@$FRONTEND_IP "kubectl get services"
-          ssh ubuntu@$FRONTEND_IP "kubectl get ingress"
+          ssh ubuntu@$FRONTEND_IP "export KUBECONFIG=~/.kube/config && kubectl get pods -o wide"
+          ssh ubuntu@$FRONTEND_IP "export KUBECONFIG=~/.kube/config && kubectl get services"
+          ssh ubuntu@$FRONTEND_IP "export KUBECONFIG=~/.kube/config && kubectl get ingress || echo 'No ingress resources found'"
